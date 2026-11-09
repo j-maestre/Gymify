@@ -1,0 +1,53 @@
+rules_version = '2';
+// Reglas de seguridad de GymLog. Se pegan en Firebase → Firestore Database → Reglas.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() { return request.auth != null; }
+    function me() { return request.auth.uid; }
+
+    // Datos privados: perfil privado y entrenamientos (solo el dueño)
+    match /users/{uid}/{document=**} {
+      allow read, write: if signedIn() && me() == uid;
+    }
+
+    // Perfil público: alias y foto (lo lee cualquier usuario con sesión, para buscar amigos y rankings)
+    match /profiles/{uid} {
+      allow read: if signedIn();
+      allow write: if signedIn() && me() == uid
+        && request.resource.data.alias is string && request.resource.data.alias.size() <= 20;
+    }
+
+    // Alias únicos
+    match /aliases/{alias} {
+      allow read: if signedIn();
+      allow create, update: if signedIn() && request.resource.data.uid == me();
+      allow delete: if signedIn() && resource.data.uid == me();
+    }
+
+    // Marcas públicas para rankings: marks/{uid}_{ejercicio}
+    match /marks/{id} {
+      allow read: if signedIn();
+      allow create, update: if signedIn() && request.resource.data.uid == me()
+        && id == me() + '_' + request.resource.data.key;
+      allow delete: if signedIn() && resource.data.uid == me();
+    }
+
+    // Amistades: friendships/{uidA_uidB} con users ordenados
+    match /friendships/{id} {
+      allow read: if signedIn() && (resource == null || me() in resource.data.users);
+      allow create: if signedIn()
+        && request.resource.data.from == me()
+        && request.resource.data.status == 'pending'
+        && request.resource.data.users.size() == 2
+        && request.resource.data.users[0] < request.resource.data.users[1]
+        && me() in request.resource.data.users
+        && request.resource.data.to in request.resource.data.users
+        && request.resource.data.to != me()
+        && id == request.resource.data.users[0] + '_' + request.resource.data.users[1];
+      allow update: if signedIn() && resource.data.to == me()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status'])
+        && request.resource.data.status == 'accepted';
+      allow delete: if signedIn() && me() in resource.data.users;
+    }
+  }
+}
