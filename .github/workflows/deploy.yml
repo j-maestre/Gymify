@@ -17,6 +17,6 @@ jobs:
       - uses: actions/configure-pages@v5
       # Sin compilación: se publica la carpeta tal cual
       - uses: actions/upload-pages-artifact@v3
-        with: { path: . }
+        with: { path: gym-app }
       - id: d
         uses: actions/deploy-pages@v4
